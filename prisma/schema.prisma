@@ -1,0 +1,270 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String        @id
+  name          String
+  email         String        @unique
+  emailVerified Boolean       @default(false)
+  image         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  memberships   GroupMember[]
+  listings      Listing[]
+  robloxAccount RobloxAccount?
+  applications  Application[] @relation("ApplicantApplications")
+  comments      ApplicationComment[] @relation("CommentAuthors")
+  statusChanges ApplicationStatusEvent[] @relation("StatusChangers")
+  permissions   DepartmentPermission[]
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String   @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model CommunityGroup {
+  id          String        @id @default(cuid())
+  name        String
+  slug        String        @unique
+  description String?
+  robloxGroupId String?
+  logoUrl     String?
+  accentColor String        @default("#ff6f9d")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  members     GroupMember[]
+  listings    Listing[]
+  departments Department[]
+  instanceConfig InstanceConfig?
+}
+
+model InstanceConfig {
+  id            String         @id @default("instance")
+  setupComplete Boolean        @default(false)
+  groupId       String         @unique
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  group         CommunityGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+}
+
+model GroupMember {
+  id        String         @id @default(cuid())
+  role      GroupRole      @default(MEMBER)
+  createdAt DateTime       @default(now())
+  userId    String
+  groupId   String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group     CommunityGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+  @@index([groupId])
+}
+
+model Listing {
+  id          String        @id @default(cuid())
+  title       String
+  slug        String        @unique
+  description String
+  category    String
+  status      ListingStatus @default(DRAFT)
+  location    String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  authorId    String
+  groupId     String
+  departmentId String
+  author      User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  group       CommunityGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  department  Department    @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  questions   ApplicationQuestion[]
+  applications Application[]
+
+  @@index([groupId, status])
+  @@index([authorId])
+  @@index([departmentId, status])
+}
+
+model RobloxAccount {
+  id          String   @id @default(cuid())
+  robloxUserId String  @unique
+  username    String
+  displayName String?
+  verifiedAt  DateTime @default(now())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Department {
+  id          String                @id @default(cuid())
+  name        String
+  slug        String
+  description String?
+  accent      String?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  groupId     String
+  group       CommunityGroup        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  listings    Listing[]
+  permissions DepartmentPermission[]
+
+  @@unique([groupId, slug])
+  @@index([groupId])
+}
+
+model DepartmentPermission {
+  id           String     @id @default(cuid())
+  canPost      Boolean    @default(false)
+  canReview    Boolean    @default(false)
+  userId       String
+  departmentId String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, departmentId])
+  @@index([departmentId])
+}
+
+model ApplicationQuestion {
+  id          String        @id @default(cuid())
+  section     String        @default("Application")
+  prompt      String
+  type        QuestionType
+  required    Boolean       @default(true)
+  options     Json?
+  sortOrder   Int           @default(0)
+  listingId   String
+  listing     Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  answers     ApplicationAnswer[]
+
+  @@index([listingId, sortOrder])
+}
+
+model Application {
+  id            String                  @id @default(cuid())
+  status        ApplicationStatus       @default(SUBMITTED)
+  submittedAt   DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  listingId     String
+  applicantId   String
+  listing       Listing                 @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  applicant     User                    @relation("ApplicantApplications", fields: [applicantId], references: [id], onDelete: Cascade)
+  answers       ApplicationAnswer[]
+  statusHistory ApplicationStatusEvent[]
+  comments      ApplicationComment[]
+
+  @@index([listingId, status])
+  @@index([applicantId, updatedAt])
+}
+
+model ApplicationAnswer {
+  id            String              @id @default(cuid())
+  value         String?
+  fileUrl       String?
+  applicationId String
+  questionId    String
+  application   Application         @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  question      ApplicationQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, questionId])
+}
+
+model ApplicationStatusEvent {
+  id            String            @id @default(cuid())
+  fromStatus    ApplicationStatus?
+  toStatus      ApplicationStatus
+  note          String?
+  createdAt     DateTime          @default(now())
+  applicationId String
+  changedById   String?
+  application   Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  changedBy     User?             @relation("StatusChangers", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([applicationId, createdAt])
+}
+
+model ApplicationComment {
+  id            String      @id @default(cuid())
+  body          String
+  createdAt     DateTime    @default(now())
+  applicationId String
+  authorId      String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  author        User        @relation("CommentAuthors", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
+}
+
+enum GroupRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum ListingStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ApplicationStatus {
+  SUBMITTED
+  REVIEWING
+  ACCEPTED
+  REJECTED
+}
+
+enum QuestionType {
+  SHORT_TEXT
+  LONG_TEXT
+  MULTIPLE_CHOICE
+  YES_NO
+  FILE
+  LINK
+}
